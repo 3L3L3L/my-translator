@@ -4,10 +4,8 @@ import google.generativeai as genai
 # 1. 페이지 설정 및 와이드 모드 적용
 st.set_page_config(page_title="실시간 다국어 번역기", layout="wide")
 
-# [🔥 버그 수정] session_state를 활용해 매크로 텍스트를 최초 1회만 안전하게 분리 로드합니다.
-# 이렇게 해야 사용자가 타이핑한 내용이 새로고침 시 빈 값으로 씹히는 현상이 사라집니다.
-if "input_text" not in st.session_state:
-    st.session_state.input_text = st.query_params.get("text", "")
+# [매크로 연동] 주소창에서 매크로가 보내온 텍스트가 있는지 확인
+query_text = st.query_params.get("text", "")
 
 # 2. 커스텀 CSS (고급스러운 디자인)
 st.markdown("""
@@ -50,8 +48,17 @@ st.title("나만의 실시간 다국어 번역기")
 st.write("왼쪽 창에 내용을 입력하면 오른쪽 창에 실시간으로 번역 결과가 표시됩니다.")
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# 3. 사이드바 API 키 세팅
-gemini_key = st.sidebar.text_input("Gemini API Key", type="password", value=st.secrets.get("GEMINI_API_KEY", ""))
+# [🔥 버그 수정] 로컬 환경에 secrets 파일이 없을 때 튕기는 현상을 완벽히 방지합니다.
+default_key = ""
+try:
+    default_key = st.secrets.get("GEMINI_API_KEY", "")
+)
+except Exception:
+    # 로컬에 secrets.toml 파일이 없어도 에러를 내지 않고 공백으로 자연스럽게 넘어갑니다.
+    pass
+
+# 사이드바 API 키 세팅
+gemini_key = st.sidebar.text_input("Gemini API Key", type="password", value=default_key)
 
 # 4. 전체 다국어 선택 딕셔너리
 lang_dict = {
@@ -77,7 +84,6 @@ col_left, col_right = st.columns(2)
 
 with col_left:
     source_lang_name = st.selectbox("원본 언어 선택", list(lang_dict.keys()), index=0, key="src_lang")
-    # 중복 충돌을 일으키던 value 파라미터를 과감히 제거했습니다.
     text_to_translate = st.text_area(
         "원본 내용 (Input)", 
         height=380, 
@@ -98,7 +104,7 @@ with col_right:
     # 실시간 텍스트 감지 및 번역 로직 수행
     if text_to_translate.strip():
         if not gemini_key:
-            translated_text = "사이드바에 Gemini API Key를 입력하거나 Streamlit Secrets에 등록해 주세요."
+            translated_text = "⚠️ 왼쪽 사이드바창을 열어 발급받으신 Gemini API Key를 입력해 주세요."
         else:
             try:
                 # Gemini 엔진 초기화
@@ -131,7 +137,6 @@ with col_right:
                     translated_text = "번역 엔진이 빈 결과를 반환했습니다."
                     
             except Exception as e:
-                # 에러 발생 시 공백으로 묻히지 않고 무조건 화면에 에러를 뱉도록 설계
                 translated_text = f"번역 중 시스템 오류가 발생했습니다: {str(e)}"
     
     # 결과창 출력
