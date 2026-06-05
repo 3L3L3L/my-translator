@@ -4,10 +4,12 @@ import google.generativeai as genai
 # 1. 페이지 설정 및 와이드 모드 적용
 st.set_page_config(page_title="실시간 다국어 번역기", layout="wide")
 
-# [매크로 연동] 주소창에서 매크로가 보내온 텍스트가 있는지 확인
-query_text = st.query_params.get("text", "")
+# [🔥 버그 수정] session_state를 활용해 매크로 텍스트를 최초 1회만 안전하게 분리 로드합니다.
+# 이렇게 해야 사용자가 타이핑한 내용이 새로고침 시 빈 값으로 씹히는 현상이 사라집니다.
+if "input_text" not in st.session_state:
+    st.session_state.input_text = st.query_params.get("text", "")
 
-# 2. 커스텀 CSS (고급스러운 미니멀 그레이 디자인 & 테두리 통일)
+# 2. 커스텀 CSS (고급스러운 디자인)
 st.markdown("""
     <style>
     .stApp {
@@ -75,9 +77,9 @@ col_left, col_right = st.columns(2)
 
 with col_left:
     source_lang_name = st.selectbox("원본 언어 선택", list(lang_dict.keys()), index=0, key="src_lang")
+    # 중복 충돌을 일으키던 value 파라미터를 과감히 제거했습니다.
     text_to_translate = st.text_area(
         "원본 내용 (Input)", 
-        value=query_text,
         height=380, 
         placeholder="여기에 텍스트를 입력하거나 붙여넣으세요...",
         key="input_text"
@@ -99,11 +101,11 @@ with col_right:
             translated_text = "사이드바에 Gemini API Key를 입력하거나 Streamlit Secrets에 등록해 주세요."
         else:
             try:
-                # Gemini 엔진 초기화 (가장 안정적인 1.5-flash 모델 적용)
+                # Gemini 엔진 초기화
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                # 프롬프트 조립 규칙 정교화 (자동감지와 단일언어 타겟팅 분리)
+                # 프롬프트 조립 규칙
                 if source_lang_name == "자동 감지":
                     prompt = (
                         f"Translate the following text into {lang_dict[target_lang_name]}. "
@@ -126,12 +128,13 @@ with col_right:
                 if response.text:
                     translated_text = response.text
                 else:
-                    translated_text = "번역 엔진이 빈 결과를 반환했습니다. 문장을 조금 더 길게 작성해 보세요."
+                    translated_text = "번역 엔진이 빈 결과를 반환했습니다."
                     
             except Exception as e:
+                # 에러 발생 시 공백으로 묻히지 않고 무조건 화면에 에러를 뱉도록 설계
                 translated_text = f"번역 중 시스템 오류가 발생했습니다: {str(e)}"
     
-    # 결과창 출력 (디자인 완벽 매칭 및 상태 고지)
+    # 결과창 출력
     st.text_area(
         "번역 결과 (Output)",
         value=translated_text,
